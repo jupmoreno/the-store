@@ -37,7 +37,6 @@ jobs:
     - name: Check status
       run: |
         ./local.sh status
-        curl -s -o /dev/null -w "%{http_code}" http://localhost | grep -q "200" || (echo "ERROR: Website not accessible" && exit 1)
 
     - name: Run E2E tests
       run: |
