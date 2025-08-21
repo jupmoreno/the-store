@@ -28,12 +28,16 @@ jobs:
 
     - name: Create Kind cluster and deploy services
       run: |
-        ./local.sh create-cluster
+        ./local.sh create-cluster --skip-tests --skip-status
 
     - name: Check status
       run: |
         ./local.sh status
-        curl -f http://localhost || (echo "ERROR: Website not accessible" && exit 1)
+        curl -s -o /dev/null -w "%{http_code}" http://localhost | grep -q "200" || (echo "ERROR: Website not accessible" && exit 1)
+
+    - name: Run E2E tests
+      run: |
+        ./local.sh e2e-test
 
     - name: Clean up cluster
       run: |

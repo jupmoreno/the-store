@@ -6,6 +6,21 @@ Our platform provides a complete shopping experience with:
 - **Scalable microservices** built with multiple languages and frameworks
 - **Real-time inventory management** and order processing
 
+## 🏗️ Architecture
+
+The Store is built with a microservices architecture that uses different technologies:
+
+![Architecture](/docs/images/architecture.png)
+
+| Service | Language | Description |
+|---------|----------|-------------|
+| [UI](./src/ui/) | Java (Spring Boot) | Modern web interface with themes and chat bot |
+| [Catalog](./src/catalog/) | Go | Product catalog API with search and filtering |
+| [Cart](./src/cart/) | Java (Spring Boot) | Shopping cart management with Redis/DynamoDB |
+| [Orders](./src/orders/) | Java (Spring Boot) | Order processing and management |
+| [Checkout](./src/checkout/) | Node.js (NestJS) | Checkout orchestration and payment processing |
+
+
 ## 🛠️ Development
 
 ### Prerequisites
@@ -37,27 +52,35 @@ Use the `local.sh` script to manage your local Kubernetes cluster:
 After running `./local.sh create-cluster`, access The Store at: **http://localhost**.
 
 ### Testing
-Run end-to-end tests with Cypress:
+
+#### E2E Testing
+
+Run end-to-end tests to validate the complete system:
 
 ```bash
-cd e2e
-npm install
-npm run cypress:open
+# Run e2e tests on existing cluster
+./local.sh e2e-test
 ```
 
-## 🏗️ Architecture
+**Note**: These tests are run automatically when creating or rebuilding the cluster. You can skip them using the `--skip-tests` parameter for faster setup:
 
-The Store is built with a microservices architecture that uses different technologies:
+```bash
+# Create cluster without running tests (faster setup)
+./local.sh create-cluster --skip-tests
 
-![Architecture](/docs/images/architecture.png)
+# Rebuild cluster without running tests
+./local.sh rebuild-cluster --skip-tests
+```
 
-| Service | Language | Description |
-|---------|----------|-------------|
-| [UI](./src/ui/) | Java (Spring Boot) | Modern web interface with themes and chat bot |
-| [Catalog](./src/catalog/) | Go | Product catalog API with search and filtering |
-| [Cart](./src/cart/) | Java (Spring Boot) | Shopping cart management with Redis/DynamoDB |
-| [Orders](./src/orders/) | Java (Spring Boot) | Order processing and management |
-| [Checkout](./src/checkout/) | Node.js (NestJS) | Checkout orchestration and payment processing |
+#### Load Testing
+Run load generator tests to validate system performance:
+
+```bash
+# Run load generator tests
+./local.sh load-test
+```
+
+The load generator will run performance tests against your local cluster for 10 minutes (or until manually stopped) to validate system behavior under load.
 
 ---
 

@@ -25,23 +25,6 @@ print_error() {
     echo -e "${RED}$1\033[0m"
 }
 
-show_usage() {
-    echo "Usage: $0 [COMMAND] [OPTIONS]"
-    echo ""
-    echo "COMMANDS:"
-    echo "  help            Show this help message (default)"
-    echo "  create-cluster  Create cluster and deploy services"
-    echo "  delete-cluster  Delete the cluster"
-    echo "  rebuild-cluster Delete and recreate cluster"
-    echo "  status          Show cluster status"
-    echo "  reload-images   Build and load Docker images"
-    echo ""
-    echo "OPTIONS:"
-    echo "  -c, --cluster NAME   Cluster name (default: the-store)"
-    echo "  -n, --namespace NAME Kubernetes namespace (default: the-store)"
-    echo "  -h, --help           Show this help"
-}
-
 check_prerequisites() {
     print_status "Checking prerequisites..."
 
@@ -62,6 +45,17 @@ check_prerequisites() {
         exit 1
     fi
     print_success "Kubectl is installed"
+}
+
+create_cluster_and_deploy() {
+    create_cluster
+    install_ingress
+    build_images
+    load_images
+    deploy_services
+
+    [ "$SKIP_TESTS" = true ] && print_warning "Tests skipped" || run_e2e_tests
+    [ "$SKIP_STATUS" = true ] && print_warning "Status skipped" || show_status
 }
 
 create_cluster() {
@@ -113,6 +107,21 @@ EOF
     print_success "Cluster is ready"
 }
 
+install_ingress() {
+    if ! kubectl get namespace ingress-nginx &> /dev/null; then
+        print_status "Installing nginx ingress controller..."
+        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.13.1/deploy/static/provider/kind/deploy.yaml
+        print_status "Waiting for nginx ingress controller to be ready..."
+        kubectl wait --namespace ingress-nginx \
+            --for=condition=ready pod \
+            --selector=app.kubernetes.io/component=controller \
+            --timeout=300s
+        print_success "Nginx ingress controller installed"
+    else
+        print_success "Nginx ingress controller already installed"
+    fi
+}
+
 build_images() {
     print_status "Building local Docker images..."
     print_status "Using image tag: $IMAGE_TAG"
@@ -131,21 +140,6 @@ load_images() {
         kind load docker-image the-store-$service:$IMAGE_TAG --name $CLUSTER_NAME
     done
     print_success "Images loaded into cluster"
-}
-
-install_ingress() {
-    if ! kubectl get namespace ingress-nginx &> /dev/null; then
-        print_status "Installing nginx ingress controller..."
-        kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.13.1/deploy/static/provider/kind/deploy.yaml
-        print_status "Waiting for nginx ingress controller to be ready..."
-        kubectl wait --namespace ingress-nginx \
-            --for=condition=ready pod \
-            --selector=app.kubernetes.io/component=controller \
-            --timeout=300s
-        print_success "Nginx ingress controller installed"
-    else
-        print_success "Nginx ingress controller already installed"
-    fi
 }
 
 deploy_services() {
@@ -180,16 +174,6 @@ deploy_services() {
     print_status "Waiting for all pods to be ready and running..."
     kubectl wait --namespace $NAMESPACE --for=condition=ready pods --timeout=300s --all
     print_success "All pods are ready and running"
-}
-
-delete_cluster() {
-    print_status "Deleting cluster '$CLUSTER_NAME'..."
-    if kind get clusters | grep -q "^$CLUSTER_NAME$"; then
-        kind delete cluster --name $CLUSTER_NAME
-        print_success "Cluster '$CLUSTER_NAME' deleted successfully"
-    else
-        print_warning "Cluster '$CLUSTER_NAME' does not exist"
-    fi
 }
 
 show_status() {
@@ -233,26 +217,118 @@ show_status() {
     fi
 }
 
-rebuild_cluster() {
-    print_status "Rebuilding cluster '$CLUSTER_NAME'..."
-    delete_cluster
-    create_and_deploy
+delete_cluster() {
+    if kind get clusters | grep -q "^$CLUSTER_NAME$"; then
+        kind delete cluster --name $CLUSTER_NAME
+        print_success "Cluster '$CLUSTER_NAME' deleted successfully"
+    else
+        print_error "Cluster '$CLUSTER_NAME' does not exist"
+    fi
 }
 
-build_and_load_images() {
+run_e2e_tests() {
+    print_status "Running end-to-end tests..."
+    bash "$DIR/src/e2e/scripts/run-docker.sh" -n host 'http://localhost'
+    print_success "E2E tests completed!"
+}
+
+show_help() {
+    echo "Usage: $0 [COMMAND] [OPTIONS]"
+    echo ""
+    echo "COMMANDS:"
+    echo "  help            Show this help message (default)"
+    echo "  create-cluster  Create cluster and deploy services"
+    echo "  delete-cluster  Delete the cluster"
+    echo "  rebuild-cluster Delete and recreate cluster"
+    echo "  status          Show cluster status"
+    echo "  reload-images   Build and load Docker images"
+    echo "  e2e-test        Run end-to-end tests"
+    echo "  load-test       Run load generator tests"
+    echo ""
+    echo "OPTIONS:"
+    echo "  -c, --cluster NAME   Cluster name (default: the-store)"
+    echo "  -n, --namespace NAME Kubernetes namespace (default: the-store)"
+    echo "  --skip-tests         Skip running e2e tests when creating/rebuilding cluster"
+    echo "  --skip-status        Skip status display when creating/rebuilding cluster"
+    echo "  -h, --help           Show this help"
+}
+
+cmd_create_cluster() {
+    check_prerequisites
+    create_cluster_and_deploy
+}
+
+cmd_rebuild_cluster() {
+    check_prerequisites
+    print_status "Rebuilding cluster '$CLUSTER_NAME'..."
+    delete_cluster
+    create_cluster_and_deploy
+}
+
+cmd_delete_cluster() {
+    check_prerequisites
+    delete_cluster
+}
+
+cmd_reload_images() {
+    check_prerequisites
     print_status "Building and loading Docker images..."
     build_images
     load_images
     print_success "Images built and loaded successfully"
 }
 
-create_and_deploy() {
-    create_cluster
-    install_ingress
-    build_images
-    load_images
-    deploy_services
+cmd_status() {
+    check_prerequisites
     show_status
+}
+
+cmd_e2e_tests() {
+    check_prerequisites
+
+    if ! kind get clusters | grep -q "^$CLUSTER_NAME$"; then
+        print_error "Cluster '$CLUSTER_NAME' does not exist. Please create it first with 'create-cluster' command."
+        exit 1
+    fi
+
+    if ! kubectl get namespace $NAMESPACE &> /dev/null; then
+        print_error "Namespace '$NAMESPACE' does not exist. Please deploy services first with 'create-cluster' command."
+        exit 1
+    fi
+
+    if ! kubectl wait --namespace $NAMESPACE --for=condition=available deployments --timeout=30s --all &> /dev/null; then
+        print_error "Services are not running. Please ensure all deployments are available."
+        exit 1
+    fi
+
+    run_e2e_tests
+}
+
+cmd_load_generator() {
+    check_prerequisites
+
+    if ! kind get clusters | grep -q "^$CLUSTER_NAME$"; then
+        print_error "Cluster '$CLUSTER_NAME' does not exist. Please create it first with 'create-cluster' command."
+        exit 1
+    fi
+
+    if ! kubectl get namespace $NAMESPACE &> /dev/null; then
+        print_error "Namespace '$NAMESPACE' does not exist. Please deploy services first with 'create-cluster' command."
+        exit 1
+    fi
+
+    if ! kubectl wait --namespace $NAMESPACE --for=condition=available deployments --timeout=30s --all &> /dev/null; then
+        print_error "Services are not running. Please ensure all deployments are available."
+        exit 1
+    fi
+
+    run_load_generator
+}
+
+run_load_generator() {
+    print_status "Running load generator..."
+    bash "$DIR/src/load-generator/scripts/run-docker.sh" -n host -t 'http://localhost' -d 600
+    print_success "Load generator completed!"
 }
 
 main() {
@@ -260,31 +336,31 @@ main() {
     IMAGE_TAG="latest"
     CLUSTER_NAME="the-store"
     NAMESPACE="the-store"
+    SKIP_TESTS=false
+    SKIP_STATUS=false
 
     while [[ $# -gt 0 ]]; do
         case $1 in
-            help|create-cluster|delete-cluster|rebuild-cluster|status|reload-images) COMMAND="$1"; shift ;;
+            help|create-cluster|delete-cluster|rebuild-cluster|status|reload-images|e2e-test|load-test) COMMAND="$1"; shift ;;
             -c|--cluster) CLUSTER_NAME="$2"; shift 2 ;;
             -n|--namespace) NAMESPACE="$2"; shift 2 ;;
-            -h|--help) show_usage; exit 0 ;;
-            *) echo "Unknown option: $1"; show_usage; exit 1 ;;
+            --skip-tests) SKIP_TESTS=true; shift ;;
+            --skip-status) SKIP_STATUS=true; shift ;;
+            -h|--help) show_help; exit 0 ;;
+            *) echo "Unknown option: $1"; show_help; exit 1 ;;
         esac
     done
 
-    print_status "Using cluster name: $CLUSTER_NAME"
-    print_status "Using image tag: $IMAGE_TAG"
-    print_status "Command: $COMMAND"
-
-    check_prerequisites
-
     case $COMMAND in
-        create-cluster) create_and_deploy;;
-        delete-cluster) delete_cluster;;
-        rebuild-cluster) rebuild_cluster;;
-        status) show_status;;
-        reload-images) build_and_load_images;;
-        help) show_usage; exit 0;;
-        *) show_usage; exit 1;;
+        create-cluster) cmd_create_cluster;;
+        delete-cluster) cmd_delete_cluster;;
+        rebuild-cluster) cmd_rebuild_cluster;;
+        status) cmd_status;;
+        reload-images) cmd_reload_images;;
+        e2e-test) cmd_e2e_tests;;
+        load-test) cmd_load_generator;;
+        help) show_help; exit 0;;
+        *) print_error "Unknown command: $COMMAND"; show_help; exit 1;;
     esac
 }
 
