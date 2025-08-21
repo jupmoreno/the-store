@@ -4,13 +4,17 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'src/**'
+      - 'local.sh'
+      - '.github/workflows/main.yml'
 
 jobs:
   deploy:
     strategy:
       matrix:
         os: [ubuntu-latest]
-    name: Deploy on ${{ matrix.os }}
+    name: On ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
 

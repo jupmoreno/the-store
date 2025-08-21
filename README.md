@@ -24,9 +24,9 @@ The Store is built with a microservices architecture that uses different technol
 ## 🛠️ Development
 
 ### Prerequisites
-- Docker Desktop running
-- Kind (Kubernetes in Docker) installed
-- kubectl CLI tool installed
+- [Docker](https://docs.docker.com/get-docker/) running
+- [Kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) installed
+- [Kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) installed
 
 ### Cluster Management
 
