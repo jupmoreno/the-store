@@ -1,4 +1,7 @@
 # The Store
+
+[![Build](https://github.com/jupmoreno/the-store/actions/workflows/main.yml/badge.svg)](https://github.com/jupmoreno/the-store/actions/workflows/main.yml)
+
 **The Store** is a modern e-commerce platform built with microservices architecture.
 
 Our platform provides a complete shopping experience with:
