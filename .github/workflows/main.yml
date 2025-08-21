@@ -9,7 +9,7 @@ jobs:
   deploy:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-13]
     name: Deploy on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
@@ -36,7 +36,9 @@ jobs:
         curl -f http://localhost || (echo "ERROR: Website not accessible" && exit 1)
 
     - name: Clean up cluster
-      if: always()
       run: |
         ./local.sh delete-cluster
-        kind get clusters | grep -q . && (echo "ERROR: Clusters still exist after cleanup" && exit 1)
+        if kind get clusters | grep -q .; then
+          echo "ERROR: Clusters still exist after cleanup"
+          exit 1
+        fi
