@@ -1,0 +1,42 @@
+name: Deploy services to local cluster
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    name: Deploy on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Docker
+      uses: docker/setup-docker-action@v4
+
+    - name: Set up Kind
+      uses: helm/kind-action@v1
+      with:
+        install_only: true
+
+    - name: Create Kind cluster and deploy services
+      run: |
+        ./local.sh create-cluster
+
+    - name: Check status
+      run: |
+        ./local.sh status
+        curl -f http://localhost || (echo "ERROR: Website not accessible" && exit 1)
+
+    - name: Clean up cluster
+      if: always()
+      run: |
+        ./local.sh delete-cluster
+        kind get clusters | grep -q . && (echo "ERROR: Clusters still exist after cleanup" && exit 1)
